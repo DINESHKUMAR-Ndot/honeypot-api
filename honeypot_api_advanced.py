@@ -47,7 +47,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 # Configuration
-API_KEY = os.getenv("API_KEY", "PV8QLLXOKKF-RrUTQXsElrj1etm7k4I2PTm1OMlRGxg")
+API_KEY = os.getenv("API_KEY", "f5yAlSlOwFjQ9QnbSLE8lFp9Vk3cqyAGECC3WH2Mt5k")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", None)  # Optional: for Claude integration
 
 # In-memory conversation storage

@@ -5,7 +5,9 @@ This version uses Claude API for more sophisticated and adaptive agent responses
 
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, Field, ValidationError
 from typing import List, Optional, Dict, Any
 import uvicorn
 import re
@@ -18,6 +20,31 @@ app = FastAPI(
     description="AI-powered scam detection with Claude-powered autonomous agent",
     version="2.0.0"
 )
+
+# Add CORS middleware to allow frontend testing
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Custom exception handler for validation errors
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Custom handler for validation errors to provide detailed error messages
+    """
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "VALIDATION_ERROR",
+            "message": "The request body does not match the expected schema",
+            "detail": exc.errors(),
+            "body": exc.body if hasattr(exc, 'body') else None
+        }
+    )
 
 # Configuration
 API_KEY = os.getenv("API_KEY", "PV8QLLXOKKF-RrUTQXsElrj1etm7k4I2PTm1OMlRGxg")

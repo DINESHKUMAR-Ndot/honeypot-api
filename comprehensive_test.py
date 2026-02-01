@@ -8,7 +8,7 @@ import json
 import time
 
 # CONFIGURATION - CHANGE THESE!
-BASE_URL = "http://localhost:8080"  # Change to Railway URL after deployment
+BASE_URL = "https://honeypot-api-r6ff.onrender.com"  # Change to Railway URL after deployment
 API_KEY = "f5yAISIOwFjQ9QnbSLE8lFp9Vk3cqyAQECC3WHZM15k"
 
 headers = {

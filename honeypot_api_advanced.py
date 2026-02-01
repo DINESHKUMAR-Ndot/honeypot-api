@@ -626,7 +626,7 @@ async def honeypot_endpoint(request: Request):
         agent_engaged=agent_engaged,
         response_message=response_message,
         turn_count=turn_count,
-        extracted_intelligence=intelligence,
+        extracted_intelligence=intelligence.dict(),
         scam_type=scam_type,
         reasoning=reasoning
     )

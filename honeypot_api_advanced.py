@@ -542,36 +542,39 @@ async def health_check():
 
 @app.post("/api/honeypot", response_model=ConversationResponse)
 async def honeypot_endpoint(
-    request: Optional[ConversationRequest] = None,
+    request: Request,
     x_api_key: str = Header(..., alias="x-api-key")
 ):
-    """Main honeypot endpoint"""
+    """Main honeypot endpoint - Robust manual parsing"""
     verify_api_key(x_api_key)
     
-    # Handle missing body
-    if request is None:
-        request = ConversationRequest()
+    try:
+        data = await request.json()
+        model_request = ConversationRequest(**data)
+    except Exception:
+        # If body is empty, invalid JSON, or missing fields: USE DEFAULTS
+        model_request = ConversationRequest()
     
-    conv_id = request.conversation_id
+    conv_id = model_request.conversation_id
     if conv_id not in conversation_history:
         conversation_history[conv_id] = []
     
     # Add current message
     current_message = Message(
         role="user",
-        content=request.message,
+        content=model_request.message,
         timestamp=datetime.now().isoformat()
     )
     conversation_history[conv_id].append(current_message)
     
     # Full history
-    full_history = request.conversation_history + conversation_history[conv_id]
+    full_history = model_request.conversation_history + conversation_history[conv_id]
     
     # Detect scam
-    is_scam, confidence, scam_type = detect_scam(request.message, full_history)
+    is_scam, confidence, scam_type = detect_scam(model_request.message, full_history)
     
     # Extract intelligence
-    intelligence = extract_intelligence(request.message, full_history)
+    intelligence = extract_intelligence(model_request.message, full_history)
     
     # Determine persona based on scam type
     persona_map = {
@@ -587,7 +590,7 @@ async def honeypot_endpoint(
     
     if agent_engaged:
         response_message = generate_advanced_agent_response(
-            request.message,
+            model_request.message,
             full_history,
             scam_type or "unknown",
             persona_type

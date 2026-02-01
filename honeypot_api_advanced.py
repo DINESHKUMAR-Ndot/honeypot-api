@@ -543,16 +543,35 @@ async def health_check():
 @app.post("/api/honeypot", response_model=ConversationResponse)
 async def honeypot_endpoint(
     request: Request,
-    x_api_key: str = Header(..., alias="x-api-key")
+    x_api_key: Optional[str] = Header(None, alias="x-api-key")
 ):
     """Main honeypot endpoint - Robust manual parsing"""
+    # 1. Manual Header Validation
+    if not x_api_key:
+        # Check if it was sent as 'x-api-key' in lower case
+        x_api_key = request.headers.get('x-api-key')
+    
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="Missing x-api-key header")
+        
     verify_api_key(x_api_key)
     
+    # 2. Robust Body Parsing
     try:
-        data = await request.json()
+        # Try to read body even if content-type is missing or wrong
+        body_bytes = await request.body()
+        if not body_bytes:
+            data = {}
+        else:
+            try:
+                data = await request.json()
+            except Exception:
+                # If json parsing fails, assume empty
+                data = {}
+                
         model_request = ConversationRequest(**data)
     except Exception:
-        # If body is empty, invalid JSON, or missing fields: USE DEFAULTS
+        # Fallback for any parsing error
         model_request = ConversationRequest()
     
     conv_id = model_request.conversation_id

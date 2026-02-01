@@ -542,11 +542,15 @@ async def health_check():
 
 @app.post("/api/honeypot", response_model=ConversationResponse)
 async def honeypot_endpoint(
-    request: ConversationRequest,
+    request: Optional[ConversationRequest] = None,
     x_api_key: str = Header(..., alias="x-api-key")
 ):
     """Main honeypot endpoint"""
     verify_api_key(x_api_key)
+    
+    # Handle missing body
+    if request is None:
+        request = ConversationRequest()
     
     conv_id = request.conversation_id
     if conv_id not in conversation_history:

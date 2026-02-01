@@ -674,8 +674,8 @@ async def list_conversations(x_api_key: str = Header(..., alias="x-api-key")):
 
 @app.post("/", response_model=ConversationResponse)
 async def root_honeypot(
-    request: Optional[ConversationRequest] = None,
-    x_api_key: str = Header(..., alias="x-api-key")
+    request: Request,
+    x_api_key: Optional[str] = Header(None, alias="x-api-key")
 ):
     """Fallback handler for root URL"""
     return await honeypot_endpoint(request, x_api_key)
@@ -683,8 +683,8 @@ async def root_honeypot(
 
 @app.post("/honeypot", response_model=ConversationResponse)
 async def simple_honeypot(
-    request: Optional[ConversationRequest] = None,
-    x_api_key: str = Header(..., alias="x-api-key")
+    request: Request,
+    x_api_key: Optional[str] = Header(None, alias="x-api-key")
 ):
     """Fallback handler for /honeypot URL"""
     return await honeypot_endpoint(request, x_api_key)

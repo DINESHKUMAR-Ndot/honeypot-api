@@ -120,8 +120,8 @@ class Message(BaseModel):
 
 
 class ConversationRequest(BaseModel):
-    conversation_id: str
-    message: str
+    conversation_id: Optional[str] = Field(default_factory=lambda: f"test-{datetime.now().timestamp()}")
+    message: Optional[str] = "Hello, this is a test message."
     conversation_history: Optional[List[Message]] = []
     metadata: Optional[Dict[str, Any]] = {}
 

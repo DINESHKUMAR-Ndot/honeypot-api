@@ -541,37 +541,27 @@ async def health_check():
 
 
 @app.post("/api/honeypot", response_model=ConversationResponse)
-async def honeypot_endpoint(
-    request: Request,
-    x_api_key: Optional[str] = Header(None, alias="x-api-key")
-):
-    """Main honeypot endpoint - Robust manual parsing"""
+async def honeypot_endpoint(request: Request):
+    """Main honeypot endpoint - Simplified Robust Parsing"""
     # 1. Manual Header Validation
-    if not x_api_key:
-        # Check if it was sent as 'x-api-key' in lower case
-        x_api_key = request.headers.get('x-api-key')
+    x_api_key = request.headers.get('x-api-key')
     
+    if not x_api_key:
+        # Fallback: check headers case-insensitively if needed, but standard is lowercase
+        # FastAPI/Starlette headers are case-insensitive dicts usually
+        pass
+        
     if not x_api_key:
         raise HTTPException(status_code=401, detail="Missing x-api-key header")
         
     verify_api_key(x_api_key)
     
-    # 2. Robust Body Parsing
+    # 2. Simplified Body Parsing
     try:
-        # Try to read body even if content-type is missing or wrong
-        body_bytes = await request.body()
-        if not body_bytes:
-            data = {}
-        else:
-            try:
-                data = await request.json()
-            except Exception:
-                # If json parsing fails, assume empty
-                data = {}
-                
+        data = await request.json()
         model_request = ConversationRequest(**data)
     except Exception:
-        # Fallback for any parsing error
+        # If body is empty, invalid JSON, or missing fields: USE DEFAULTS
         model_request = ConversationRequest()
     
     conv_id = model_request.conversation_id

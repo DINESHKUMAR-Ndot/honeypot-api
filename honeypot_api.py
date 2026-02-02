@@ -24,7 +24,11 @@ API_KEY = os.getenv("API_KEY", "f5yAISIOwFjQ9QnbSLE8lFp9Vk3cqyAQECC3WHZM15k")
 
 @app.get("/")
 async def root_get():
-    return {"status": "active", "service": "Agentic Honeypot", "uptime": "ok"}
+    # Return SAME format as POST to satisfy picky testers
+    return {
+        "status": "success", 
+        "reply": "Service is active and ready. Waiting for scammer."
+    }
 
 @app.post("/api/honeypot")
 @app.post("/") 

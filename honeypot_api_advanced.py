@@ -83,6 +83,10 @@ def run_callback(session_id: str, history_texts: List[str]):
     except Exception as e:
         print(f"Callback failed: {e}")
 
+@app.get("/")
+async def root_get():
+    return {"status": "active", "service": "Agentic Honeypot", "uptime": "ok"}
+
 @app.post("/api/honeypot")
 @app.post("/") 
 async def honeypot_endpoint(request: Request, background_tasks: BackgroundTasks):

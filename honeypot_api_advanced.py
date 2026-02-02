@@ -94,11 +94,19 @@ async def honeypot_endpoint(request: Request, background_tasks: BackgroundTasks)
         if x_api_key and x_api_key != API_KEY:
              return JSONResponse(status_code=401, content={"status": "error", "reply": "Invalid Key"})
 
-        # Try Parse JSON
+        # Try Parse JSON (Robust against missing Content-Type)
         try:
             data = await request.json()
         except:
-            data = {}
+            try:
+                # Fallback: Parse raw body if Content-Type is wrong/missing
+                body_bytes = await request.body()
+                if body_bytes:
+                    data = json.loads(body_bytes)
+                else:
+                    data = {}
+            except:
+                data = {}
 
         # 2. ADAPTIVE PARSING (Handle Any Schema)
         

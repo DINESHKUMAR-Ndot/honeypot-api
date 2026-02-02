@@ -31,7 +31,7 @@ app.add_middleware(
 )
 
 # Configuration
-API_KEY = os.getenv("API_KEY", "f5yAlSlOwFjQ9QnbSLE8lFp9Vk3cqyAGECC3WH2Mt5k")
+API_KEY = os.getenv("API_KEY", "f5yAISIOwFjQ9QnbSLE8lFp9Vk3cqyAQECC3WHZM15k")
 
 # In-memory conversation storage
 conversation_history: Dict[str, List[Dict]] = {}

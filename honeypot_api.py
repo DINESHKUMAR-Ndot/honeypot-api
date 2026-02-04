@@ -151,11 +151,18 @@ async def honeypot_endpoint(request: Request):
     
     # 2. UNIVERSAL PARSING
     try:
+        # Priority 1: JSON
         try:
             data = await request.json()
         except:
-            body_bytes = await request.body()
-            data = json.loads(body_bytes) if body_bytes else {}
+            # Priority 2: Form Data
+            try:
+                form_data = await request.form()
+                data = dict(form_data)
+            except:
+                # Priority 3: Raw Body
+                body_bytes = await request.body()
+                data = json.loads(body_bytes) if body_bytes else {}
     except:
         data = {}
 

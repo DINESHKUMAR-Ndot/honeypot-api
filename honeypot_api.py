@@ -133,6 +133,8 @@ def run_callback(session_id: str, history_texts: list):
 # --- API ENDPOINTS ---
 
 @app.get("/")
+@app.get("/api/honeypot")
+@app.get("/api/honeypot/")
 async def root_get():
     # Return SAME format as POST to satisfy picky testers
     return {
@@ -141,6 +143,7 @@ async def root_get():
     }
 
 @app.post("/api/honeypot")
+@app.post("/api/honeypot/")
 @app.post("/") 
 async def honeypot_endpoint(request: Request):
     # 1. AUTHENTICATION (Soft Check for Tester Compatibility)

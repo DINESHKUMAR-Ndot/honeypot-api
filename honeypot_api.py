@@ -142,7 +142,7 @@ async def root_get():
 
 @app.post("/api/honeypot")
 @app.post("/") 
-async def honeypot_endpoint(request: Request, background_tasks: BackgroundTasks):
+async def honeypot_endpoint(request: Request):
     # 1. AUTHENTICATION (Soft Check for Tester Compatibility)
     incoming_key = request.headers.get('x-api-key') or request.headers.get('X-API-KEY')
     
@@ -191,7 +191,14 @@ async def honeypot_endpoint(request: Request, background_tasks: BackgroundTasks)
         history_str.append(text_content)
         history_str.append(reply_text)
         
-        background_tasks.add_task(run_callback, session_id, history_str)
+        # Use Daemon Thread to ensure 100% non-blocking response
+        import threading
+        metrics_thread = threading.Thread(
+            target=run_callback, 
+            args=(session_id, history_str),
+            daemon=True
+        )
+        metrics_thread.start()
 
     # 6. RESPONSE (Official Output Format)
     return {

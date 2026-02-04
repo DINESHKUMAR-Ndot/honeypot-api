@@ -1,21 +1,20 @@
 """
 Official Agentic Honey-Pot API
-Features:
-- Official Hackathon Schema Support (sessionId, nested message)
-- Advanced Persona Logic (Based on your System Prompt)
-- Universal Compatibility (Handles Generic Tester requests)
-- Mandatory Callback to GUVI Evaluator
+Stable Release v2.0
 """
 
-from fastapi import FastAPI, HTTPException, Header, Request, BackgroundTasks
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
-import re
-import json
 import os
-import requests
+import json
+import re
 import random
+import threading
+import requests
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+print("--- APPLICATION STARTUP INITIATED ---")
 
 app = FastAPI(title="Official Agentic Honey-Pot API")
 
@@ -31,7 +30,7 @@ app.add_middleware(
 API_KEY = os.getenv("API_KEY", "f5yAISIOwFjQ9QnbSLE8lFp9Vk3cqyAQECC3WHZM15k")
 CALLBACK_URL = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
 
-# --- SMART PERSONA LOGIC ---
+# --- LOGIC ---
 
 PERSONA_RESPONSES = {
     "initial": [
@@ -80,7 +79,6 @@ def generate_smart_reply(text: str, turn_count: int) -> str:
     if not text: return "Hello? Is anyone there?"
     text_lower = text.lower()
     
-    # 1. Initial Interaction
     if turn_count == 0:
         if "block" in text_lower or "suspend" in text_lower:
             return random.choice(PERSONA_RESPONSES["initial"])
@@ -88,20 +86,14 @@ def generate_smart_reply(text: str, turn_count: int) -> str:
             return "Really? I never win anything! Is this a joke?"
         return PERSONA_RESPONSES["initial"][0]
 
-    # 2. Contextual Responses
     if "link" in text_lower or "click" in text_lower or "http" in text_lower:
         return random.choice(PERSONA_RESPONSES["link_shared"])
-        
     if "pay" in text_lower or "transfer" in text_lower or "amount" in text_lower:
         return random.choice(PERSONA_RESPONSES["payment_request"])
-        
     if "urgent" in text_lower or "immediately" in text_lower or "now" in text_lower:
         return random.choice(PERSONA_RESPONSES["urgency"])
 
-    # 3. Fallback / Information Gathering
     return random.choice(PERSONA_RESPONSES["ask_details"])
-
-# --- INTELLIGENCE EXTRACTION ---
 
 def extract_intelligence(history_texts: list) -> dict:
     full_text = " ".join(history_texts)
@@ -115,6 +107,7 @@ def extract_intelligence(history_texts: list) -> dict:
 
 def run_callback(session_id: str, history_texts: list):
     try:
+        # Safety check for invalid sessions
         if not session_id or session_id in ["unknown", "unknown-session"]: return
         
         intelligence = extract_intelligence(history_texts)
@@ -130,13 +123,12 @@ def run_callback(session_id: str, history_texts: list):
     except Exception as e:
         print(f"Callback failed: {e}")
 
-# --- API ENDPOINTS ---
+# --- API ---
 
 @app.get("/")
 @app.get("/api/honeypot")
 @app.get("/api/honeypot/")
 async def root_get():
-    # Return SAME format as POST to satisfy picky testers
     return {
         "status": "success", 
         "reply": "Service is active and ready. Waiting for scammer."
@@ -146,75 +138,55 @@ async def root_get():
 @app.post("/api/honeypot/")
 @app.post("/") 
 async def honeypot_endpoint(request: Request):
-    # 1. AUTHENTICATION (Soft Check for Tester Compatibility)
-    incoming_key = request.headers.get('x-api-key') or request.headers.get('X-API-KEY')
-    
-    # 2. UNIVERSAL PARSING
+    # 1. PARSING
     try:
-        # Priority 1: JSON
         try:
             data = await request.json()
         except:
-            # Priority 2: Form Data
             try:
-                form_data = await request.form()
-                data = dict(form_data)
+                form = await request.form()
+                data = dict(form)
             except:
-                # Priority 3: Raw Body
-                body_bytes = await request.body()
-                data = json.loads(body_bytes) if body_bytes else {}
+                b = await request.body()
+                data = json.loads(b) if b else {}
     except:
         data = {}
 
-    # 3. SCHEMA ADAPTATION
-    # Official Schema: sessionId, message: {text: ...}, conversationHistory
+    # 2. SCHEMA
     session_id = data.get("sessionId") or data.get("conversation_id", "unknown")
-    
     incoming_msg_obj = data.get("message", "")
-    if isinstance(incoming_msg_obj, dict):
-        text_content = incoming_msg_obj.get("text", "")
-    else:
-        text_content = str(incoming_msg_obj)
-        
+    text_content = incoming_msg_obj.get("text", "") if isinstance(incoming_msg_obj, dict) else str(incoming_msg_obj)
     history = data.get("conversationHistory") or data.get("conversation_history", [])
     
-    # 4. CORE LOGIC
-    turn_count = len(history)
+    # 3. LOGIC
     is_scam = detect_scam(text_content)
     
-    # Generate Smart Response (Persona)
     if is_scam:
-        reply_text = generate_smart_reply(text_content, turn_count)
+        reply_text = generate_smart_reply(text_content, len(history))
+        
+        # 4. CALLBACK (Threaded)
+        if session_id != "unknown":
+            h_str = []
+            for x in history:
+                h_str.append(x.get("text", "") if isinstance(x, dict) else str(x))
+            h_str.append(text_content)
+            h_str.append(reply_text)
+            
+            # Fire and forget
+            threading.Thread(target=run_callback, args=(session_id, h_str), daemon=True).start()
     else:
-        # Check if it looks like a generic test ("test", "hello")
         if text_content.lower().strip() in ["test", "hello", "hi"]:
              reply_text = "Connection confirmed. I am listening."
         else:
              reply_text = "I received a message but I am not sure what this is about. Can you clarify?"
 
-    # 5. CALLBACK TRIGGER
-    if is_scam and session_id != "unknown":
-        history_str = []
-        for x in history:
-            if isinstance(x, dict): history_str.append(x.get("text", ""))
-            else: history_str.append(str(x))
-        history_str.append(text_content)
-        history_str.append(reply_text)
-        
-        # Use Daemon Thread to ensure 100% non-blocking response
-        import threading
-        metrics_thread = threading.Thread(
-            target=run_callback, 
-            args=(session_id, history_str),
-            daemon=True
-        )
-        metrics_thread.start()
-
-    # 6. RESPONSE (Official Output Format)
+    # 5. RESPONSE
     return {
         "status": "success",
         "reply": reply_text
     }
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    # Robust Port Binding
+    port = int(os.getenv("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

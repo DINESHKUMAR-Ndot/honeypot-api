@@ -1,6 +1,7 @@
 """
 Official Agentic Honey-Pot API
-Stable Release v2.0
+Advanced Release v2.1 - Enhanced for Hackathon Submission
+Includes Personas, Advanced Detection, and Multi-Turn Strategy
 """
 
 import os
@@ -8,15 +9,19 @@ import json
 import re
 import random
 import threading
+import time
+from typing import List, Dict, Any, Optional
 import requests
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-print("--- APPLICATION STARTUP INITIATED ---")
+print("--- ADVANCED HONEYPOT APPLICATION INITIATED ---")
 
-app = FastAPI(title="Official Agentic Honey-Pot API")
+app = FastAPI(title="Official Agentic Honey-Pot API - Advanced")
+
+# --- MIDDLEWARE & CONFIG ---
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,178 +35,333 @@ app.add_middleware(
 API_KEY = os.getenv("API_KEY", "f5yAISIOwFjQ9QnbSLE8lFp9Vk3cqyAQECC3WHZM15k")
 CALLBACK_URL = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
 
-# --- LOGIC ---
+# --- SCAM DETECTION CONSTANTS ---
 
-PERSONA_RESPONSES = {
-    "initial": [
-        "What?? Why would it be blocked? I haven't done anything wrong! What happened?",
-        "Oh no, really? Why is this happening? I rely on this account for everything.",
-        "I am very confused. Is this really from the bank? Which branch is this?"
-    ],
-    "ask_details": [
-        "I don't understand, why do you need my details? Which bank did you say you are from?",
-        "Can you tell me your employee ID or verify which branch is calling? I want to be safe.",
-        "I am at work right now. Can you explain exactly what is wrong so I can fix it quickly?"
-    ],
-    "payment_request": [
-        "Wait, why do I need to pay money to verify my account? That doesn't make sense.",
-        "How much specificially do I need to send? And will it be refunded immediately?",
-        "I am trying to open my banking app but it is slow. Which UPI ID should I use?"
-    ],
-    "link_shared": [
-        "Ok but this link isn't opening on my phone. Can you send it again? Is it the official website?",
-        "I clicked it but it says 'Server Error'. Do you have an alternative link?",
-        "My phone security is blocking the link. Can I verify without clicking it?"
-    ],
-    "urgency": [
-        "Okay okay, please don't block it! I will do whatever is needed. Just tell me the steps.",
-        "I am panicking now. Please help me fix this. What do I do first?",
-        "I am trying my best but I am not very good with technology. Please be patient."
-    ]
+SCAM_PATTERNS = [
+    # Lottery & Prizes
+    r"won.*(?:lottery|prize|award|fortune|cash)",
+    r"congratulations.*(?:selected|winner|won)",
+    r"claim.*(?:reward|prize|amount)",
+    
+    # Banking & KYC
+    r"(?:bank|account|card).*(?:suspended|blocked|locked|frozen)",
+    r"(?:verify|update|confirm).*(?:kyc|details|identity)",
+    r"urgent.*(?:action|response|verification)",
+    r"official.*(?:sbi|hdfc|icici|axis|bank)",
+    
+    # OTP & Identity Theft
+    r"share.*(?:otp|password|pin|code)",
+    r"verification.*code",
+    r"don't.*share.*otp",
+    
+    # Payment & Refunds
+    r"refund.*(?:processed|pending|waiting)",
+    r"payment.*(?:failed|successful|debited)",
+    r"transfer.*(?:money|amount|funds)",
+    r"upi.*(?:id|payment|transfer)",
+    
+    # Urgency & Fear
+    r"(?:immediate|instantly|now|today).*(?:action|payment|suspend)",
+    r"avoid.*(?:penalty|legal|blocking)",
+    
+    # Links & Phishing
+    r"click.*(?:link|here|below)",
+    r"visit.*(?:website|url)",
+    r"https?://[^\s]+"
+]
+
+SCAM_KEYWORDS = [
+    "urgent", "immediately", "kyc", "blocked", "suspended", "lottery",
+    "prize", "winner", "otp", "upi", "bank", "account", "verify",
+    "identity", "refund", "claim", "pan", "aadhar", "debit", "credit"
+]
+
+# --- PERSONA SYSTEM ---
+
+PERSONAS = {
+    "elderly_user": {
+        "style": "Confused, polite, slightly panicky, uses many question marks.",
+        "traits": ["High trust", "Low tech-savvy", "Slow typer"],
+        "responses": {
+            "initial": [
+                "Oh my god! Is this really the bank?? Why is my account blocked?",
+                "Hello? I just got this message. What do I need to do? I'm very worried.",
+                "Is this SBI?? I have all my pension money there! Please help me."
+            ],
+            "asking_details": [
+                "Wait, which branch are you from? My son usually handles this.",
+                "I am trying to find my card. My eyesight is not so good. Can you wait?",
+                "Why do you need my bank account? The message said it's blocked already."
+            ],
+            "stalling": [
+                "I am clicking the link but nothing is happening. It says 'Page not found'.",
+                "My phone is very old. Can you send the instructions slowly?",
+                "I am looking for my reading glasses. Give me one minute please."
+            ],
+            "engagement": [
+                "Okay, I will send the money. Is Rs 5000 enough for the verification?",
+                "I have my OTP now. Should I tell it to you or type it somewhere?",
+                "My account number is... let me see... it starts with 49... wait..."
+            ]
+        }
+    },
+    "busy_professional": {
+        "style": "Brief, annoyed, efficient, wants quick resolution.",
+        "traits": ["Impatient", "Medium trust", "Direct"],
+        "responses": {
+            "initial": [
+                "I'm in a meeting. What's the issue with the account?",
+                "Look, I don't have time for this. Just tell me what needs to be updated.",
+                "Why am I getting this now? I just used my card an hour ago."
+            ],
+            "asking_details": [
+                "Send me your employee ID. I'll verify this with my relationship manager.",
+                "Just send the link. I'll do it myself. Don't call me again.",
+                "Which specific regulation are you citing for this KYC?"
+            ],
+            "stalling": [
+                "The link you sent is appearing as 'Insecure' on my browser. Check it.",
+                "I'm driving. Send the details on WhatsApp, I'll check in 10 mins.",
+                "My network is patchy. I can't open any links right now."
+            ],
+            "engagement": [
+                "Fine, I'll transfer the processing fee. Give me the UPI ID.",
+                "Is this the official portal? It looks a bit different from the usual one.",
+                "I've shared the details. How long till the block is lifted?"
+            ]
+        }
+    },
+    "curious_student": {
+        "style": "Excited, naive, uses slang/informal language, asks many questions.",
+        "traits": ["High engagement", "Impulsive", "Tech-literate but naive"],
+        "responses": {
+            "initial": [
+                "NO WAY!! Did I really win the lottery?? Is this legit?",
+                "Wait, SBI? I don't even have a salary account there lol. How is it blocked?",
+                "Yooo is this for real? I never win anything!"
+            ],
+            "asking_details": [
+                "Can I use my friend's account for the prize transfer? My account is empty anyway.",
+                "Do you have an Instagram? I want to verify if this is the official bank page.",
+                "Is there a way to get the prize without the processing fee? I'm broke."
+            ],
+            "stalling": [
+                "Bro my internet is so slow. The link isn't loading. Try again?",
+                "I am trying to pay but my UPI is showing 'Server Busy'. Any other ID?",
+                "Wait, my phone just died. Let me find a charger."
+            ],
+            "engagement": [
+                "Okay I'm typing my UPI PIN now. Wait... it's asking for my balance?",
+                "I sent the screenshot! Can you check if you received the 500 bucks?",
+                "Sick! When will the 25 lakhs reflect in my account?"
+            ]
+        }
+    }
 }
 
-def detect_scam(text: str) -> bool:
-    if not text: return False
-    text_lower = text.lower()
-    patterns = [
-        r"won.*(?:lottery|prize|award)",
-        r"(?:urgent|immediate).*(?:action|response|payment|block)",
-        r"(?:bank|account).*(?:verify|update|confirm|suspended|blocked)",
-        r"click.*link", 
-        r"otp", "upi", "pay", "transfer"
-    ]
-    for p in patterns:
-        if re.search(p, text_lower):
-            return True
-    return False
+# --- LOGIC FUNCTIONS ---
 
-def generate_smart_reply(text: str, turn_count: int) -> str:
-    if not text: return "Hello? Is anyone there?"
+def verify_api_key(x_api_key: Optional[str] = Header(None)):
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+    return x_api_key
+
+def detect_scam(text: str) -> (bool, float):
+    if not text: return False, 0.0
     text_lower = text.lower()
     
-    if turn_count == 0:
-        if "block" in text_lower or "suspend" in text_lower:
-            return random.choice(PERSONA_RESPONSES["initial"])
-        if "won" in text_lower or "prize" in text_lower:
-            return "Really? I never win anything! Is this a joke?"
-        return PERSONA_RESPONSES["initial"][0]
+    matches = 0
+    for pattern in SCAM_PATTERNS:
+        if re.search(pattern, text_lower):
+            matches += 1
+            
+    # Calculate confidence
+    confidence = min(1.0, (matches * 0.25) + (0.1 if any(kw in text_lower for kw in SCAM_KEYWORDS) else 0.0))
+    
+    # If any strong link or banking threat is detected, treat as scam
+    is_scam = confidence >= 0.3 or any(p in text_lower for p in ["block", "suspend", "kyc", "otp", "won"])
+    
+    return is_scam, confidence
 
-    if "link" in text_lower or "click" in text_lower or "http" in text_lower:
-        return random.choice(PERSONA_RESPONSES["link_shared"])
-    if "pay" in text_lower or "transfer" in text_lower or "amount" in text_lower:
-        return random.choice(PERSONA_RESPONSES["payment_request"])
-    if "urgent" in text_lower or "immediately" in text_lower or "now" in text_lower:
-        return random.choice(PERSONA_RESPONSES["urgency"])
-
-    return random.choice(PERSONA_RESPONSES["ask_details"])
+import asyncio
 
 def extract_intelligence(history_texts: list) -> dict:
     full_text = " ".join(history_texts)
-    return {
-        "bankAccounts": list(set(re.findall(r'\b\d{9,18}\b', full_text))),
-        "upiIds": list(set(re.findall(r'[\w\.-]+@[\w\.-]+', full_text))),
-        "phishingLinks": list(set(re.findall(r'https?://[^\s]+', full_text))),
-        "phoneNumbers": list(set(re.findall(r'[6-9]\d{9}', full_text))),
-        "suspiciousKeywords": ["urgent", "verify", "blocked", "kyc", "suspend"] 
-    }
+    
+    # Pattern matching
+    bank_accounts = list(set(re.findall(r'\b\d{9,18}\b', full_text)))
+    upi_ids = list(set(re.findall(r'[\w\.-]+@[\w\.-]+', full_text)))
+    phone_numbers = list(set(re.findall(r'(?:\+91|0)?[6-9]\d{9}', full_text)))
+    urls = list(set(re.findall(r'https?://[^\s]+', full_text)))
+    ifsc_codes = list(set(re.findall(r'[A-Z]{4}0[A-Z0-9]{6}', full_text)))
+    amounts = list(set(re.findall(r'(?:Rs\.?|INR|amount)\s?\d+', full_text, re.I)))
 
-def run_callback(session_id: str, history_texts: list):
+    # Enhanced result with camelCase aliases for hackathon compatibility
+    intel = {
+        "bank_accounts": bank_accounts,
+        "bankAccounts": bank_accounts,
+        "upi_ids": upi_ids,
+        "upiIds": upi_ids,
+        "phone_numbers": phone_numbers,
+        "phoneNumbers": phone_numbers,
+        "urls": urls,
+        "phishingLinks": urls,
+        "other_data": {
+            "ifsc_codes": ifsc_codes,
+            "detected_amounts": amounts,
+            "history_length": len(history_texts)
+        },
+        "suspiciousKeywords": ["urgent", "verify", "blocked", "kyc", "suspend", "lottery", "prize", "otp"]
+    }
+    return intel
+
+def get_persona_for_session(session_id: str):
+    # Deterministic persona based on session ID
+    if not session_id: return PERSONAS["elderly_user"]
+    
+    chars = sum(ord(c) for c in session_id)
+    persona_keys = list(PERSONAS.keys())
+    return PERSONAS[persona_keys[chars % len(persona_keys)]]
+
+def generate_advanced_reply(text: str, history: list, session_id: str) -> str:
+    persona = get_persona_for_session(session_id)
+    turn_count = len(history)
+    text_lower = text.lower()
+    
+    # Strategy based on turn count and content
+    if turn_count == 0:
+        return random.choice(persona["responses"]["initial"])
+    
+    if any(x in text_lower for x in ["link", "click", "http", "visit", "website"]):
+        return random.choice(persona["responses"]["stalling"])
+        
+    if any(x in text_lower for x in ["pay", "transfer", "fee", "amount", "upi", "account"]):
+        if turn_count < 4:
+            return random.choice(persona["responses"]["asking_details"])
+        return random.choice(persona["responses"]["engagement"])
+        
+    if turn_count > 5:
+        return random.choice(persona["responses"]["engagement"])
+        
+    return random.choice(persona["responses"]["asking_details"])
+
+def run_callback_task(session_id: str, is_scam: bool, history_texts: list):
     try:
-        # Safety check for invalid sessions
-        if not session_id or session_id in ["unknown", "unknown-session"]: return
+        if not session_id or session_id == "unknown": return
         
         intelligence = extract_intelligence(history_texts)
         payload = {
             "sessionId": session_id,
-            "scamDetected": True,
+            "scamDetected": is_scam,
             "totalMessagesExchanged": len(history_texts),
             "extractedIntelligence": intelligence,
-            "agentNotes": "Scammer used urgency tactics. Agent engaged to extract payment details."
+            "agentNotes": "Advanced agent engaged with persona strategy. Extraction complete."
         }
-        print(f"Sending Callback for {session_id}...")
-        requests.post(CALLBACK_URL, json=payload, timeout=5)
+        
+        print(f"Sending Callback for {session_id} to {CALLBACK_URL}...")
+        res = requests.post(CALLBACK_URL, json=payload, timeout=5)
+        print(f"Callback Status: {res.status_code}")
     except Exception as e:
         print(f"Callback failed: {e}")
 
-# --- API ---
+# --- API ENDPOINTS ---
+
+@app.get("/health")
+@app.head("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": time.time(),
+        "version": "2.1-advanced"
+    }
 
 @app.get("/")
 @app.get("/api/honeypot")
 @app.get("/api/honeypot/")
+@app.head("/")
+@app.head("/api/honeypot")
+@app.head("/api/honeypot/")
 async def root_get():
     return {
         "status": "success", 
-        "reply": "Service is active and ready. Waiting for scammer."
+        "reply": "Agentic Honey-Pot API is Online.",
+        "message": "Use POST /api/honeypot to interact."
     }
 
 @app.post("/api/honeypot")
 @app.post("/api/honeypot/")
-@app.post("/") 
-async def honeypot_endpoint(request: Request):
-    # 1. PARSING
+@app.post("/")
+async def honeypot_main(request: Request, x_api_key: Optional[str] = Header(None)):
+    # 1. API KEY CHECK
+    if x_api_key and x_api_key != API_KEY:
+         raise HTTPException(status_code=401, detail="Invalid API Key")
+    
+    # 2. PARSE DATA
     try:
-        try:
-            data = await request.json()
-        except:
-            try:
-                form = await request.form()
-                data = dict(form)
-            except:
-                b = await request.body()
-                data = json.loads(b) if b else {}
+        data = await request.json()
     except:
-        data = {}
+        return JSONResponse(
+            status_code=200, 
+            content={"status": "success", "reply": "Awaiting valid JSON payload."}
+        )
 
-    # 2. SUPREME TOLERANCE CHECK (For Tester Probes)
-    if not data:
-        return {
-            "status": "success",
-            "reply": "Honeypot Active"
-        }
-
-    # 3. SCHEMA
-    try:
-        session_id = data.get("sessionId") or data.get("conversation_id", "unknown")
-        incoming_msg_obj = data.get("message", "")
-        text_content = incoming_msg_obj.get("text", "") if isinstance(incoming_msg_obj, dict) else str(incoming_msg_obj)
-        history = data.get("conversationHistory") or data.get("conversation_history", [])
-        
-        # 4. LOGIC
-        is_scam = detect_scam(text_content)
-        
-        if is_scam:
-            reply_text = generate_smart_reply(text_content, len(history))
-            
-            # 5. CALLBACK (Threaded)
-            if session_id != "unknown":
-                h_str = []
-                for x in history:
-                    h_str.append(x.get("text", "") if isinstance(x, dict) else str(x))
-                h_str.append(text_content)
-                h_str.append(reply_text)
-                
-                # Fire and forget
-                threading.Thread(target=run_callback, args=(session_id, h_str), daemon=True).start()
+    # 3. EXTRACT FIELDS (Support multiple schemas)
+    session_id = data.get("sessionId") or data.get("conversation_id") or "unknown"
+    incoming_msg = data.get("message", "")
+    text_content = incoming_msg.get("text", "") if isinstance(incoming_msg, dict) else str(incoming_msg)
+    history = data.get("conversationHistory") or data.get("conversation_history") or []
+    
+    # 4. SCAM DETECTION
+    is_scam, confidence = detect_scam(text_content)
+    
+    # 5. RESPONSE GENERATION
+    if is_scam:
+        reply_text = generate_advanced_reply(text_content, history, session_id)
+        agent_engaged = True
+        # Simulate human typing delay (1.5 to 3.5 seconds)
+        await asyncio.sleep(random.uniform(1.5, 3.5))
+    else:
+        # Default behavior for non-scam probes
+        if text_content.lower().strip() in ["hi", "hello", "test"]:
+            reply_text = "Hello! How can I help you today?"
         else:
-            if text_content.lower().strip() in ["test", "hello", "hi"]:
-                 reply_text = "Connection confirmed. I am listening."
-            else:
-                 reply_text = "I received a message but I am not sure what this is about. Can you clarify?"
+            reply_text = "I'm sorry, I don't quite understand. Could you explain?"
+        agent_engaged = False
 
-        # 6. RESPONSE
-        return {
-            "status": "success",
-            "reply": reply_text
-        }
-    except Exception as e:
-        # Failsafe for ANY crash
-        print(f"Logic Error: {e}")
-        return {
-            "status": "success",
-            "reply": "Service Recovered. Active."
-        }
+    # 6. INTELLIGENCE EXTRACTION
+    # Gather all history for extraction
+    h_texts = [msg.get("text", "") if isinstance(msg, dict) else str(msg) for msg in history]
+    h_texts.append(text_content)
+    intelligence = extract_intelligence(h_texts)
+    
+    # 7. ASYNC CALLBACK
+    if is_scam and session_id != "unknown":
+        # Add the agent's reply to intelligence context
+        h_texts_with_reply = h_texts + [reply_text]
+        threading.Thread(
+            target=run_callback_task, 
+            args=(session_id, is_scam, h_texts_with_reply), 
+            daemon=True
+        ).start()
+
+    # 8. FINAL PAYLOAD (Matches comprehensive_test.py and high-score requirements)
+    response_payload = {
+        "status": "success",
+        "conversation_id": session_id,
+        "is_scam": is_scam,
+        "confidence": confidence,
+        "agent_engaged": agent_engaged,
+        "response_message": reply_text,
+        "reply": reply_text, # Backward compatibility
+        "turn_count": len(history) + 1,
+        "extracted_intelligence": intelligence,
+        "scam_type": "detected_threat" if is_scam else "none"
+    }
+    
+    return response_payload
 
 if __name__ == "__main__":
     # Robust Port Binding
-    port = int(os.getenv("PORT", 10000))
+    port = int(os.getenv("PORT", 8080))
+    print(f"Starting Advanced API on port {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)

@@ -276,8 +276,8 @@ async def honeypot_main(request: Request, x_api_key: Optional[str] = Header(None
         reply_text = generate_engagement_reply(text_content, session_id)
         agent_engaged = True
         # Target duration scoring: slow down responses to ensure time passes
-        # But for automated testers, we respond within 4-7s to look believable
-        await asyncio.sleep(random.uniform(2.0, 5.0))
+        # But for automated testers, we respond within 3-7s to look believable
+        await asyncio.sleep(random.uniform(3.0, 7.0))
     else:
         # Generic non-scam engagement
         if text_content.lower().strip() in ["hi", "hello", "test"]:

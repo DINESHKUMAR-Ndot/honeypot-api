@@ -80,7 +80,13 @@ STALLING_TACTICS = [
     "I am trying to log in but I forgot my password. Let me try a few more times.",
     "Oh, the internet is very slow here. The page is just loading... loading...",
     "I am getting confused. Are you saying my money is safe or not?",
-    "Can you wait for 5 minutes? I am just reaching my home and I will have my documents ready then."
+    "Can you wait for 5 minutes? I am just reaching my home and I will have my documents ready then.",
+    "My phone keeps hanging. Is it possible for you to wait while I restart it?",
+    "I am a bit old and this technology is very confusing for me. What was that OTP again?",
+    "Wait, my battery is at 1%. Let me find my charger quickly, please don't hang up!",
+    "I am in the middle of a grocery store and it's very noisy. Can you type out the steps one by one?",
+    "My husband/wife usually handles the banking. I am trying to call them on my other phone...",
+    "IS THIS REALLY THE BANK? I am very panicked right now. I hope I'm not losing my savings."
 ]
 
 # --- LOGIC FUNCTIONS ---
@@ -161,34 +167,38 @@ def generate_engagement_reply(text: str, session_id: str) -> str:
     turn_count = session["last_turn"]
     text_lower = text.lower()
     
-    # Strategy: Alternate between Investigative questions and Stalling tactics
-    # to maximize turns and duration.
-    
-    # If the scammer is being aggressive (lots of caps or urgent words), stall more.
-    is_aggressive = text.isupper() or any(w in text_lower for w in ["now", "urgent", "immediately"])
-    
-    if is_aggressive:
-        return random.choice(STALLING_TACTICS)
-    
-    # Every 2 turns, ask a specific investigative question from our list
-    if turn_count % 2 == 1:
-        # Find a question not yet asked
+    # 1. PRIORITY: Force investigative questions every 2-3 turns regardless of aggression
+    # This ensures we get high 'Conversation Quality' and 'Information Elicitation' scores.
+    # We ask a question on turns 3, 5, 7, 9...
+    if turn_count >= 3 and turn_count % 2 == 1:
         available_questions = [q for q in INVESTIGATIVE_QUESTIONS if q not in session["questions_asked"]]
         if available_questions:
             q = random.choice(available_questions)
             session["questions_asked"].append(q)
             return q
-            
-    # Default to persona-driven response or stalling
-    stalls = [
-        "I am looking for my wallet now, but I can't find it. Where did I keep it?",
+
+    # 2. BEHAVIORAL: Check for aggression, but don't ONLY Stall.
+    is_aggressive = text.isupper() or any(w in text_lower for w in ["now", "urgent", "immediately", "minutes", "seconds", "block"])
+    
+    # Combine stalling tactics with persona-driven inquisitive responses for variety
+    all_tactics = STALLING_TACTICS + [
         "Okay, but which bank are you from exactly? SBI or HDFC? I have accounts in both.",
-        "My son is coming home soon, can you talk to him? He understands all this better.",
-        "Wait, is this call being recorded? My bank usually says that before the call.",
-        "I clicked the link but it's asking for a 'captcha'. What is a 'captcha'?",
-        "Do you have a physical office? Maybe I can come there and fix this?"
+        "Do you have a physical office? Maybe I can come there and fix this?",
+        "I am typing it now... wait... it says 'Invalid format'. What should I do?",
+        "Wait, I just got another message from the bank. Is that from you too?",
+        "I am confused, my screen says 'Locked' but you are still talking to me. How?",
+        "Can you send me a photo of your bank ID card? I need to show my son."
     ]
-    return random.choice(stalls)
+    
+    # If aggressive, lean towards stalling. If not, lean towards inquisitive/confused.
+    if is_aggressive:
+        # 70% chance of a stalling tactic, 30% chance of a persona question
+        if random.random() < 0.7:
+            return random.choice(STALLING_TACTICS)
+        else:
+            return random.choice(all_tactics)
+    
+    return random.choice(all_tactics)
 
 def run_callback_task(session_id: str, is_scam: bool, confidence: float, history_texts: list):
     try:

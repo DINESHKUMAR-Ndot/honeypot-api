@@ -322,11 +322,16 @@ async def honeypot_main(request: Request, x_api_key: Optional[str] = Header(None
         "reply": reply_text,
         "response_message": reply_text,
         "sessionId": session_id,
+        "conversation_id": session_id, # Alias
         "scamDetected": is_scam,
+        "is_scam": is_scam, # Compatibility
         "scamType": "detected_fraud" if is_scam else "none",
+        "scam_type": "detected_fraud" if is_scam else "none", # Alias
         "confidenceLevel": confidence,
+        "confidence": confidence, # Compatibility
         "agent_engaged": agent_engaged,
         "totalMessagesExchanged": session["last_turn"],
+        "turn_count": session["last_turn"], # Compatibility
         "engagementDurationSeconds": duration,
         "extractedIntelligence": {
             "phoneNumbers": intelligence["phoneNumbers"],
@@ -338,6 +343,7 @@ async def honeypot_main(request: Request, x_api_key: Optional[str] = Header(None
             "policyNumbers": intelligence["policyNumbers"],
             "orderNumbers": intelligence["orderNumbers"]
         },
+        "extracted_intelligence": intelligence, # Compatibility
         "agentNotes": f"Identified Red Flags: {', '.join(session['red_flags']) if session['red_flags'] else 'General Suspicion'}. "
                     f"Turn Count: {session['last_turn']}. Engagement Strategy: Deceptive persona stalling."
     }
